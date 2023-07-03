@@ -1,42 +1,74 @@
 const { namespaceWrapper } = require('./namespaceWrapper');
 const crypto = require('crypto');
+const db = require('./database/db');
 
 class CoreLogic {
   async task() {
-    // Write the logic to do the work required for submitting the values and optionally store the result in levelDB
 
-    // Below is just a sample of work that a task can do
-
-    try {
-      const x = Math.random().toString(); // generate random number and convert to string
-      const cid = crypto.createHash('sha1').update(x).digest('hex'); // convert to CID
-      console.log('HASH:', cid);
-      // fetching round number to store work accordingly
-
-      if (cid) {
-        await namespaceWrapper.storeSet('cid', cid); // store CID in levelDB
+    //  this is where you need to populate the proofs database
+    //  rough format of what you need to store: 
+    /*
+      proofs_for_round : {
+        files : [ [ cid1, sizeOfCID1 ],
+                  [ cid2, sizeOfCID2 ] 
+                  ... ],
+        hash : String (sha256 over file list) -> this is what is submitted to k2,
+        totalSize : Number (megabytes you're storing)
       }
-      return cid
-    } catch (err) {
-      console.log('ERROR IN EXECUTING TASK', err);
-      return 'ERROR IN EXECUTING TASK' + err
-    }
-  }
-  async fetchSubmission() {
-    // Write the logic to fetch the submission values here and return the cid string
+    */
 
-    // fetching round number to store work accordingly
+
+      try {
+        const files = db.getFile()
+
+        const hash = calculateHash(files);
+        const totalSize = calculateFileSize(files.content);
+
+        const proofs = {
+        hash,
+        totalSize
+
+        };
+
+        console.log('Proofs stored successfully', proofs);
+    } catch (error) {
+        console.error('Error in populating proofs database', error);
+    }
+
+
+        function calculateHash(data) {
+        const hash = crypto.createHash('sha256');
+        hash.update(JSON.stringify(data));
+        const hashDigest = hash.digest('hex');
+        return hashDigest;
+        }
+
+        function calculateFileSize(content) {
+        const fileSizeInBytes = Buffer.byteLength(content, 'utf8');
+        return fileSizeInBytes;
+        }
+
+  }
+
+  async  fetchSubmission() {
 
     console.log('IN FETCH SUBMISSION');
-
-    // The code below shows how you can fetch your stored value from level DB
-
-    const cid = await namespaceWrapper.storeGet('cid'); // retrieves the cid
-    console.log('CID', cid);
-    return cid;
+  
+    let roundId = namespaceWrapper.getRound();
+  
+    const proofs = await db.getProofs(roundId);
+    if (proofs) {
+      const submission = proofs.hash + '__' + proofs.totalSize;
+      console.log('proofs for ' + roundId, submission);
+      return submission;
+    } else {
+      console.log('No proofs found for ' + roundId);
+      return null;
+    }
   }
 
   async generateDistributionList(round, _dummyTaskState) {
+
     try {
       console.log('GenerateDistributionList called');
       console.log('I am selected node');
@@ -152,26 +184,20 @@ class CoreLogic {
   }
 
   async validateNode(submission_value, round) {
-    // Write your logic for the validation of submission value here and return a boolean value in response
-
-    // The sample logic can be something like mentioned below to validate the submission
-
-    // try{
+    
 
     console.log('Received submission_value', submission_value, round);
-    // const generatedValue = await namespaceWrapper.storeGet("cid");
-    // console.log("GENERATED VALUE", generatedValue);
-    // if(generatedValue == submission_value){
-    //   return true;
-    // }else{
-    //   return false;
-    // }
-    // }catch(err){
-    //   console.log("ERROR  IN VALDIATION", err);
-    //   return false;
-    // }
+    
+    // TODO - implement an audit flow for the submissions
+    // Submissions look like proof_data_for_round.hash + "__" + proof_data_for_round.totalSize;
+    // You need to 
+    /**
+     * 1. Axios call to the node's IP  address to check the proofs api
+     * 2. Verify the hash matches the CID list
+     * 3. Verify that the CIDs add up to the total size 
+     * 4. Retrieve some CIDs and verify that they are being stored, and have the correct size
+     */
 
-    // For succesfull flow we return true for now
     return true;
   }
 
